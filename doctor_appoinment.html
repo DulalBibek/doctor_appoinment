@@ -3,463 +3,319 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Symptom Checker</title>
+    <title>HealthScan - Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --color-primary: 0, 180, 180; /* Teal */
-            --color-secondary: 59, 130, 246; /* Blue */
+        :root { --color-primary: 0, 180, 180; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .app-card { background-color: #ffffff; border: 1px solid #e2e8f0; }
+        .btn-primary { background-color: rgb(var(--color-primary)); transition: all 0.2s ease; }
+        .btn-primary:hover { background-color: rgb(0, 150, 150); transform: translateY(-1px); }
+        .spinner { border-top-color: rgb(var(--color-primary)); border-right-color: transparent; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        #resultDisease { font-size: 1rem; line-height: 1.7; color: #334155; }
+        #resultDisease h3 { font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+        #resultDisease hr { margin: 1.25rem 0; border: 0; border-top: 1px solid #e2e8f0; }
+        #resultDisease ul { list-style-type: none; padding-left: 0; margin: 1rem 0; }
+        #resultDisease li { position: relative; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+        #resultDisease li::before { content: "•"; position: absolute; left: 0.25rem; color: rgb(0, 180, 180); font-weight: bold; }
+        
+        .error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; border-color: #ef4444 !important; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
         }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f8ff; /* Slightly whiter, clinical light blue */
+        
+        .typing-indicator span {
+            display: inline-block;
+            width: 4px; height: 4px;
+            background-color: currentColor;
+            border-radius: 50%;
+            margin: 0 1px;
+            animation: bounce 1.4s infinite ease-in-out both;
         }
-        .app-card {
-            background-color: rgba(255, 255, 255, 0.95); /* Near-transparent white */
-            backdrop-filter: blur(5px);
-            border: 1px solid #d1eaff;
-        }
-        .btn-primary {
-            background-color: rgb(var(--color-primary));
-            transition: background-color 0.2s;
-        }
-        .btn-primary:hover {
-            background-color: rgb(0, 150, 150);
-        }
-        /* Custom spinner for loading state */
-        .spinner {
-            border-top-color: rgb(var(--color-primary));
-            border-right-color: transparent;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        /* Added for the new DNA/Scan icon animation */
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.05); }
-        }
-        .animate-pulse-subtle {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
         }
     </style>
 </head>
-<body class="antialiased">
+<body class="antialiased text-slate-900">
 
-    <!-- NEW: Medical Vibe Background Overlay (Large, Faint Symbol) -->
-    <div class="fixed inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-        <!-- Large Stylized Medical Cross (SVG) -->
-        <svg class="w-1/2 h-full text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <!-- A bolder, medical-looking cross symbol, taking up a large space -->
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="0.5" d="M12 4v16m8-8H4"></path>
-        </svg>
-    </div>
-    
-    <!-- Main Container - Z-index is raised so it appears above the background symbol -->
-    <!-- REFINEMENT: Changed p-4 md:p-12 to p-4 sm:p-6 md:p-12 for better mobile spacing -->
-    <div class="min-h-screen p-4 sm:p-6 md:p-12 flex justify-center items-center relative z-10">
-        <!-- App Card: Responsive and subtly transparent -->
-        <div id="app-card" class="app-card max-w-6xl w-full rounded-3xl shadow-2xl p-6 md:p-10 flex flex-col lg:flex-row space-y-8 lg:space-y-0 lg:space-x-10">
+    <div class="min-h-screen p-4 md:p-8 flex justify-center items-center">
+        <div id="app-card" class="app-card max-w-6xl w-full rounded-[2.5rem] shadow-xl p-6 md:p-10 flex flex-col lg:flex-row gap-10">
 
-            <!-- Left Panel: Input & Actions -->
-            <div class="lg:w-1/2 space-y-8">
-                
-                <!-- Header with Medical Sign -->
-                <header class="flex items-center space-x-3 text-gray-800 border-b pb-4 mb-4">
-                    <!-- Medical Sign (Stylized Heart/Cross) -->
-                    <svg class="w-10 h-10 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-.318-.318M20 12h-2m2 0v2m-4-2h-2m-2-4v2m-2-2h-2m-2 4h-2m0 0a1 1 0 100 2 1 1 0 000-2z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18v-6h4"></path>
-                    </svg>
-                    <h1 class="text-3xl font-extrabold tracking-tight">
-                        <span class="text-teal-600">Health</span><span class="text-gray-900">Scan</span>
-                    </h1>
+            <!-- Left Panel -->
+            <div class="lg:w-5/12 space-y-8">
+                <header class="flex items-center space-x-3 border-b pb-6">
+                    <div class="bg-teal-600 p-2 rounded-xl text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                    </div>
+                    <h1 class="text-2xl font-black tracking-tight text-slate-800">HealthScan Hub</h1>
                 </header>
 
-                <!-- Input Prompt Section -->
-                <section class="space-y-6">
-                    <h2 class="text-xl font-semibold text-gray-700">1. Describe Your Symptoms</h2>
-                    <p class="text-gray-500">Please provide a detailed description of your current symptoms, how long they've lasted, and any relevant medical history.</p>
-
-                    <textarea id="symptomInput" rows="5" placeholder="E.g., I have had a dull headache and a slight fever of 100.5°F for the past 24 hours. I also feel dizzy when standing up quickly." 
-                        class="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition duration-150 resize-none text-gray-700 shadow-sm"></textarea>
-                    
-                    <button id="checkButton" class="btn-primary w-full p-3 font-bold text-white rounded-xl shadow-lg shadow-teal-300/50 flex items-center justify-center space-x-2 transition transform hover:scale-[1.01] active:scale-[0.99] disabled:bg-gray-400 disabled:shadow-none">
-                        <!-- UPDATED ICON: Now represents data/analysis/science -->
-                        <svg id="buttonIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0h6"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V7h-2"></path>
-                        </svg>
-                        <span id="buttonText">Analyze Symptoms</span>
-                    </button>
-
-                    <div id="errorMessage" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl relative" role="alert">
-                        <strong class="font-bold">Input Required:</strong>
-                        <span class="block sm:inline">Please enter your symptoms before checking.</span>
-                    </div>
-
-                </section>
-                
-                <!-- Disclaimer -->
-                <footer class="mt-8 pt-4 border-t border-gray-200">
-                    <p class="text-xs text-gray-400 italic">
-                        Disclaimer: This application provides preliminary information and is not a substitute for professional medical advice, diagnosis, or treatment. Always seek the advice of a physician or other qualified health provider.
-                    </p>
-                </footer>
-            </div>
-
-            <!-- Right Panel: Results, Loading, and History -->
-            <div class="lg:w-1/2 bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-inner space-y-6">
-                <h2 class="text-xl font-semibold text-gray-700 border-b pb-3">2. Analysis Results</h2>
-
-                <!-- Initial State / Placeholder - More clinical/data vibe -->
-                <div id="initialState" class="text-center p-12 space-y-4 text-gray-500">
-                    <!-- New icon: DNA helix / Scan icon with subtle pulse animation -->
-                    <svg class="w-16 h-16 mx-auto text-teal-300 animate-pulse-subtle" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.75 7.75a4 4 0 00-.707 5.707l1.414 1.414a4 4 0 005.657 0m0-8.485a4 4 0 00-5.657 0l-1.414 1.414a4 4 0 000 5.657m13.414-5.657l-1.414 1.414a4 4 0 00-5.657 0m0 8.485l1.414-1.414a4 4 0 005.657 0"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h.01M15 12h.01"></path>
-                    </svg>
-                    <p class="text-lg font-medium text-gray-600">Awaiting Clinical Data Input</p>
-                    <p class="text-sm text-gray-500">Your symptoms will be cross-referenced against global health datasets here.</p>
-                </div>
-
-                <!-- Loading State -->
-                <div id="loadingState" class="hidden text-center p-12 space-y-4">
-                    <div class="spinner w-10 h-10 border-4 rounded-full mx-auto"></div>
-                    <p class="text-teal-600 font-medium">Analyzing over 10,000 potential conditions...</p>
-                    <p class="text-sm text-gray-500">This may take a moment while our AI cross-references your input.</p>
-                </div>
-
-                <!-- Results State -->
-                <div id="resultsState" class="hidden space-y-6">
-                    <h3 class="text-2xl font-bold text-teal-600 border-b pb-3 flex items-center space-x-2">
-                         <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
-                        Preliminary Assessment
-                    </h3>
-                    
+                <div class="space-y-6">
                     <div class="space-y-4">
-                        <!-- Result Item: Condition -->
-                        <div class="bg-white p-4 rounded-xl shadow-md border-l-4 border-teal-500">
-                            <p class="text-sm text-gray-500 font-medium">Most Probable Condition</p>
-                            <p id="resultCondition" class="text-xl font-bold text-gray-800">Common Cold (Viral Rhinitis)</p>
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Phone Number (Required)</label>
+                            <input type="tel" id="phoneNumberInput" placeholder="Enter number for session ID..." class="w-full p-4 border border-slate-200 rounded-2xl outline-none bg-slate-50 transition-all focus:border-teal-500">
+                            <p id="phoneError" class="hidden text-[10px] text-red-500 font-bold mt-1">Phone Number is needed to link AI memory.</p>
                         </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Symptoms</label>
+                            <textarea id="symptomInput" rows="5" placeholder="Detail your symptoms..." class="w-full p-4 border border-slate-200 rounded-2xl outline-none bg-slate-50 resize-none transition-all focus:border-teal-500"></textarea>
+                        </div>
+                    </div>
+                    <button id="checkButton" class="btn-primary w-full p-4 font-bold text-white rounded-2xl shadow-lg">Generate Medical Report</button>
+                </div>
 
-                        <!-- Result Item: Confidence -->
-                        <div class="bg-white p-4 rounded-xl shadow-md border-l-4 border-blue-500">
-                            <p class="text-sm text-gray-500 font-medium">Confidence Score</p>
-                            <p class="text-xl font-bold text-gray-800 flex items-center">
-                                <span id="resultConfidence">92%</span>
-                                <span class="ml-4 text-sm font-normal text-green-500 bg-green-50 p-1 rounded-full px-3">High Match</span>
-                            </p>
+                <div class="bg-slate-900 rounded-2xl p-4 overflow-hidden shadow-inner">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Live Deployment Status</span>
+                        <div class="flex items-center space-x-2">
+                            <div id="modeIndicator" class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></div>
+                            <span id="modeText" class="text-[9px] text-slate-400 font-bold uppercase">Production Mode</span>
                         </div>
-                        
-                        <!-- Result Item: Urgency -->
-                        <div id="urgencyCard" class="bg-white p-4 rounded-xl shadow-md border-l-4 border-green-500">
-                            <p class="text-sm text-gray-500 font-medium">Suggested Urgency Level</p>
-                            <p id="resultUrgency" class="text-xl font-bold text-green-600">Self-Care / Monitor</p>
-                            <p class="text-sm text-gray-600 mt-1">Symptom profile suggests a non-emergency condition. Rest and hydration recommended.</p>
+                    </div>
+                    <div id="debugLog" class="text-[11px] font-mono text-emerald-400 max-h-32 overflow-y-auto leading-relaxed">System Live. Ready for GitHub deployment.</div>
+                    <div class="flex justify-end mt-2">
+                        <button id="clearLogBtn" class="text-[10px] text-teal-500 font-bold uppercase hover:text-white">Clear</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="lg:w-7/12 bg-slate-50 rounded-[2rem] p-6 md:p-10 flex flex-col border border-slate-100">
+                <div class="flex items-center space-x-2 mb-8">
+                    <div class="w-1 h-6 bg-teal-500 rounded-full"></div>
+                    <h2 class="text-xl font-bold text-slate-800 uppercase tracking-tight">AI Agent Analysis</h2>
+                </div>
+
+                <div id="initialState" class="flex-grow flex flex-col items-center justify-center text-center space-y-4 text-slate-400">
+                    <p class="italic text-sm">Enter phone and symptoms to trigger the Agents.</p>
+                </div>
+
+                <div id="loadingState" class="hidden flex-grow flex flex-col items-center justify-center text-center space-y-4">
+                    <div class="spinner w-12 h-12 border-4 rounded-full"></div>
+                    <p class="text-teal-600 font-bold text-xs animate-pulse uppercase tracking-widest">Agent is creating report...</p>
+                </div>
+
+                <div id="resultsState" class="hidden flex-grow animate-in fade-in zoom-in duration-300">
+                    <div class="bg-white p-8 rounded-3xl shadow-xl border border-teal-50 relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-24 h-24 bg-teal-50 rounded-bl-full -mr-12 -mt-12 opacity-50"></div>
+                        <div id="resultDisease"></div>
+                        <div class="mt-8 pt-6 border-t border-slate-50 flex justify-between items-center">
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Active Session ID</p>
+                                <p id="resultPhone" class="text-sm font-bold text-slate-700">...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Suggestions/Next Steps -->
-                <div id="suggestions" class="hidden border-t pt-4 mt-6 space-y-3">
-                    <h4 class="font-semibold text-gray-700">Next Steps:</h4>
-                    <ul class="list-disc pl-5 text-gray-600 space-y-1 text-sm">
-                        <li>Consult a doctor to confirm the diagnosis and receive personalized treatment.</li>
-                        <li>Track symptom changes daily. If symptoms worsen, seek immediate medical attention.</li>
-                        <li>For emergency advice, call your local emergency number.</li>
-                    </ul>
-                </div>
-
-                <!-- NEW: Doctor Appointment Section -->
-                <div id="appointmentSection" class="mt-8 pt-6 border-t border-teal-200 space-y-4 bg-teal-50 p-6 rounded-2xl">
-                    <h2 class="text-xl font-bold text-teal-800 flex items-center space-x-2">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        3. Book an Appointment
-                    </h2>
-                    <p class="text-sm text-teal-700">Ready to consult a professional? Seamlessly schedule a tele-health or in-person visit with a specialist based on your analysis.</p>
-                    
-                    <button id="openChatButton" class="btn-primary w-full p-3 font-bold text-white rounded-xl shadow-lg shadow-teal-500/50 flex items-center justify-center space-x-2 transition transform hover:scale-[1.01] active:scale-[0.99]">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        <span>Find Available Doctors</span>
+                <div class="mt-8">
+                    <button id="openChatButton" class="w-full p-4 bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center space-x-2 hover:bg-slate-800 transition-all shadow-lg">
+                        <svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 00-2 2z"></path></svg>
+                        <span>Book an Appointment</span>
                     </button>
                 </div>
-                <!-- End Appointment Section -->
-
-
-            </div>
-            
-        </div>
-    </div>
-
-    <!-- NEW: Chatbot Modal/Floating Window -->
-    <!-- REFINEMENT: Changed fixed bottom-4 right-4 to fixed bottom-4 right-4 sm:right-6 lg:right-12 to maintain spacing on different screens -->
-    <div id="chatbotContainer" class="fixed bottom-4 right-4 sm:right-6 lg:right-12 z-50 hidden">
-        <div class="w-80 h-[400px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden border border-teal-200">
-            <!-- Header -->
-            <div class="bg-teal-600 p-3 flex justify-between items-center text-white">
-                <div class="font-bold flex items-center space-x-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 4v-4z"></path></svg>
-                    <span>Appointment Assistant</span>
-                </div>
-                <button id="closeChatButton" class="text-white hover:text-teal-200 transition">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-            
-            <!-- Messages Area -->
-            <div id="chatMessages" class="flex-grow p-3 space-y-3 overflow-y-auto bg-gray-50">
-                <!-- Initial Bot Message -->
-                <div class="flex justify-start">
-                    <div class="bg-teal-200 text-teal-900 p-2 rounded-lg max-w-[80%] shadow-sm">
-                        Hello! I'm your Appointment Assistant. How can I help you book a specialist today?
-                    </div>
-                </div>
-                <!-- Messages will be injected here -->
-            </div>
-            
-            <!-- Input Area -->
-            <div class="p-3 border-t flex space-x-2">
-                <input type="text" id="chatInput" placeholder="Ask about availability..." class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 text-sm">
-                <button id="chatSendButton" class="bg-teal-500 text-white p-2 rounded-lg hover:bg-teal-600 transition disabled:bg-gray-400">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                </button>
             </div>
         </div>
     </div>
 
-    <!-- JavaScript for UI/State Management (Reverted to Mock) -->
+    <!-- Custom UI Chatbot -->
+    <div id="chatbotContainer" class="fixed bottom-6 right-6 z-50 hidden">
+        <div class="w-80 h-[32rem] bg-white rounded-3xl shadow-2xl flex flex-col border border-slate-100 overflow-hidden shadow-2xl animate-in slide-in-from-bottom-5 duration-300">
+            <div class="bg-slate-900 p-4 flex justify-between items-center text-white">
+                <div class="flex items-center space-x-2">
+                    <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <span class="text-xs font-bold uppercase tracking-widest">Booking AI Assistant</span>
+                </div>
+                <button id="closeChatButton" class="text-slate-400 hover:text-white transition-all">
+                    <svg class="w-5 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div id="chatMessages" class="flex-grow p-4 space-y-3 overflow-y-auto bg-slate-50 text-sm scroll-smooth"></div>
+
+            <div id="agentTypingStatus" class="hidden px-4 py-2 bg-slate-50 text-[10px] text-slate-400 italic">
+                <div class="typing-indicator">Agent is thinking<span></span><span></span><span></span></div>
+            </div>
+
+            <div class="p-4 bg-white border-t border-slate-100 flex space-x-2">
+                <input type="text" id="chatInput" placeholder="Enter message..." class="flex-grow p-3 text-sm border border-slate-200 rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+                <button id="chatSendButton" class="bg-teal-500 text-white px-4 rounded-xl font-bold text-sm hover:bg-teal-600 shadow-md">Send</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
-        // --- Firebase Initialization (Required Structure) ---
-        // These global variables are provided by the canvas environment.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        // FIX: Corrected typo from __initialAuthToken to __initial_auth_token
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db, auth;
+        /**
+         * GITHUB DEPLOYMENT CONFIGURATION
+         * Ensure your n8n workflow is toggled to "ACTIVE".
+         */
+        const PRODUCTION_MODE = true; 
+        const PROD_URL = 'https://xzen.app.n8n.cloud/webhook/chat';
+        const TEST_URL = 'https://xzen.app.n8n.cloud/webhook-test/chat';
         
-        // IMPORTANT: REPLACE THIS PLACEHOLDER WITH YOUR N8N WEBHOOK URL
-        const N8N_CHAT_WEBHOOK_URL = 'YOUR_N8N_APPOINTMENT_WEBHOOK_URL_HERE'; 
+        const WEBHOOK_URL = PRODUCTION_MODE ? PROD_URL : TEST_URL;
 
-        // Mock result data for demonstration (used by startCheck)
-        const mockResult = {
-            condition: "Migraine Headache",
-            confidence: "78%",
-            urgency: "Consult a Doctor Today",
-            urgencyLevel: "urgent", // 'urgent', 'normal', 'low'
-            description: "Based on the reported symptoms (severe throbbing pain, sensitivity to light/sound), this is the most likely preliminary diagnosis. Please consult a neurologist or general practitioner."
+        const els = {
+            phone: document.getElementById('phoneNumberInput'),
+            phoneErr: document.getElementById('phoneError'),
+            symp: document.getElementById('symptomInput'),
+            btn: document.getElementById('checkButton'),
+            init: document.getElementById('initialState'),
+            load: document.getElementById('loadingState'),
+            res: document.getElementById('resultsState'),
+            resDisease: document.getElementById('resultDisease'),
+            resPhone: document.getElementById('resultPhone'),
+            chat: document.getElementById('chatbotContainer'),
+            chatMsg: document.getElementById('chatMessages'),
+            debug: document.getElementById('debugLog'),
+            clearLog: document.getElementById('clearLogBtn'),
+            typing: document.getElementById('agentTypingStatus'),
+            input: document.getElementById('chatInput'),
+            modeIndicator: document.getElementById('modeIndicator'),
+            modeText: document.getElementById('modeText')
         };
 
-        const mockResult2 = {
-            condition: "Muscle Strain (Tension)",
-            confidence: "95%",
-            urgency: "Self-Care / Monitor",
-            urgencyLevel: "low",
-            description: "Symptom profile suggests a non-emergency condition. Rest, ice, and over-the-counter pain relievers recommended."
-        };
+        // Update UI based on mode
+        if (PRODUCTION_MODE) {
+            els.modeIndicator.className = "w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50";
+            els.modeText.textContent = "Production Mode";
+        }
 
-        let currentMock = 1;
+        function log(msg, color = '#10b981') {
+            const d = document.createElement('div');
+            d.style.color = color;
+            d.innerHTML = `> ${msg}`;
+            els.debug.appendChild(d);
+            els.debug.scrollTop = els.debug.scrollHeight;
+        }
 
-
-        // Function definitions are placed outside initApp so they can be referenced globally if needed
-        function updateUrgencyStyle(level) {
-            const urgencyCard = document.getElementById('urgencyCard');
-            urgencyCard.classList.remove('border-green-500', 'border-yellow-500', 'border-red-500');
-            document.getElementById('resultUrgency').classList.remove('text-green-600', 'text-yellow-700', 'text-red-700');
-            
-            if (level === 'low') {
-                urgencyCard.classList.add('border-green-500');
-                document.getElementById('resultUrgency').classList.add('text-green-600');
-            } else if (level === 'urgent') {
-                urgencyCard.classList.add('border-yellow-500');
-                document.getElementById('resultUrgency').classList.add('text-yellow-700');
-            } else if (level === 'emergency') {
-                urgencyCard.classList.add('border-red-500');
-                document.getElementById('resultUrgency').classList.add('text-red-700');
+        function validatePhone() {
+            const val = els.phone.value.trim();
+            if (!val) {
+                els.phone.classList.add('error-shake');
+                els.phoneErr.classList.remove('hidden');
+                setTimeout(() => els.phone.classList.remove('error-shake'), 500);
+                return null;
             }
+            els.phoneErr.classList.add('hidden');
+            return val;
         }
 
-        function displayResults(result) {
-            const initialState = document.getElementById('initialState');
-            const loadingState = document.getElementById('loadingState');
-            const resultsState = document.getElementById('resultsState');
-            const suggestions = document.getElementById('suggestions');
-            const appointmentSection = document.getElementById('appointmentSection');
-
-            document.getElementById('resultCondition').textContent = result.condition;
-            document.getElementById('resultConfidence').textContent = result.confidence;
-            document.getElementById('resultUrgency').textContent = result.urgency;
-            document.getElementById('urgencyCard').querySelector('p:last-child').textContent = result.description;
-
-            updateUrgencyStyle(result.urgencyLevel);
-
-            initialState.classList.add('hidden');
-            loadingState.classList.add('hidden');
-            resultsState.classList.remove('hidden');
-            suggestions.classList.remove('hidden');
-            appointmentSection.classList.remove('hidden'); 
-        }
-
-        // Symptom Check function (MOCK)
-        function startCheck() {
-            const symptomInput = document.getElementById('symptomInput');
-            const checkButton = document.getElementById('checkButton');
-            const buttonText = document.getElementById('buttonText');
-            const buttonIcon = document.getElementById('buttonIcon');
-            const errorMessage = document.getElementById('errorMessage');
-            const initialState = document.getElementById('initialState');
-            const loadingState = document.getElementById('loadingState');
-            const resultsState = document.getElementById('resultsState');
-            const suggestions = document.getElementById('suggestions');
-            const appointmentSection = document.getElementById('appointmentSection');
-
-            errorMessage.classList.add('hidden');
-            const symptomText = symptomInput.value.trim();
-            
-            if (symptomText.length < 10) {
-                errorMessage.classList.remove('hidden');
-                return;
-            }
-
-            // Enter Loading State
-            checkButton.disabled = true;
-            checkButton.classList.add('bg-gray-400');
-            buttonText.textContent = 'Analyzing...';
-            buttonIcon.innerHTML = `<div class="spinner w-5 h-5 border-2 rounded-full"></div>`;
-            
-            initialState.classList.add('hidden');
-            resultsState.classList.add('hidden');
-            suggestions.classList.add('hidden');
-            appointmentSection.classList.add('hidden'); 
-            loadingState.classList.remove('hidden');
-
-            // Simulate API latency
-            setTimeout(() => {
-                const resultToUse = currentMock === 1 ? mockResult : mockResult2;
-                displayResults(resultToUse);
-                
-                currentMock = currentMock === 1 ? 2 : 1;
-
-                // Return to normal button state
-                checkButton.disabled = false;
-                checkButton.classList.remove('bg-gray-400');
-                buttonText.textContent = 'Analyze Symptoms';
-                buttonIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0h6"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V7h-2"></path>`;
-
-            }, 2500); 
-        }
-
-        // NEW: Chatbot Functions
-        function openChatbot() {
-            const chatbotContainer = document.getElementById('chatbotContainer');
-            const openChatButton = document.getElementById('openChatButton');
-            const chatInput = document.getElementById('chatInput');
-
-            chatbotContainer.classList.remove('hidden');
-            openChatButton.classList.add('hidden');
-            chatInput.focus();
-        }
-
-        function closeChatbot() {
-            const chatbotContainer = document.getElementById('chatbotContainer');
-            const openChatButton = document.getElementById('openChatButton');
-
-            chatbotContainer.classList.add('hidden');
-            openChatButton.classList.remove('hidden');
-        }
-
-        function addMessage(text, sender) {
-            const chatMessages = document.getElementById('chatMessages');
-
-            const msgDiv = document.createElement('div');
-            msgDiv.className = sender === 'user' ? 'flex justify-end' : 'flex justify-start';
-            
-            const contentDiv = document.createElement('div');
-            contentDiv.className = sender === 'user' 
-                ? 'bg-blue-500 text-white p-2 rounded-lg max-w-[80%] shadow-md' 
-                : 'bg-teal-200 text-teal-900 p-2 rounded-lg max-w-[80%] shadow-sm';
-            contentDiv.textContent = text;
-            
-            msgDiv.appendChild(contentDiv);
-            chatMessages.appendChild(msgDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        async function sendMessage() {
-            const chatInput = document.getElementById('chatInput');
-            const chatSendButton = document.getElementById('chatSendButton');
-            const chatMessages = document.getElementById('chatMessages');
-            
-            const message = chatInput.value.trim();
-            if (message === '') return;
-
-            addMessage(message, 'user');
-            chatInput.value = '';
-            chatInput.disabled = true;
-            chatSendButton.disabled = true;
-
-            // Placeholder for bot response/loading state
-            addMessage("...", 'bot');
-            chatMessages.lastChild.querySelector('div').textContent = 'Assistant is checking availability...';
-
+        async function triggerWorkflow(payload, callback) {
+            log(`Transmitting: ${payload.type}`);
             try {
-                // Connection to N8N Webhook for Appointment System
-                const response = await fetch(N8N_CHAT_WEBHOOK_URL, {
+                const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify(payload)
                 });
-
+                
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error("Connection failed. Ensure n8n workflow is ACTIVE.");
                 }
                 
-                const data = await response.json();
-                // Assumes n8n returns a JSON with a 'response' or 'message' field
-                const botResponse = data.response || data.message || "I received your request! A specialist will contact you to confirm the appointment details.";
-                
-                // Update the loading message with the real bot response
-                chatMessages.lastChild.querySelector('div').textContent = botResponse;
-
-            } catch (error) {
-                console.error("Error communicating with n8n:", error);
-                // Exponential backoff logic would go here in a production app
-                chatMessages.lastChild.querySelector('div').textContent = "Connection error. The booking service is temporarily unavailable. Please check the console for details.";
-            } finally {
-                chatInput.disabled = false;
-                chatSendButton.disabled = false;
-                chatInput.focus();
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                const raw = await response.text();
+                let data;
+                try { data = JSON.parse(raw); } catch(e) { data = { output: raw }; }
+                callback(Array.isArray(data) ? data[0] : data);
+            } catch (err) {
+                log(`FAIL: ${err.message}`, "#f87171");
+                els.load.classList.add('hidden');
+                els.init.classList.remove('hidden');
+                els.btn.disabled = false;
+                els.typing.classList.add('hidden');
             }
         }
-        
-        // --- Core Binding Logic (Guaranteed to run after DOM is parsed) ---
-        
-        // Use a simple, immediate closure to bind handlers once the script loads
-        document.addEventListener('DOMContentLoaded', () => {
-            // Symptom Check button
-            document.getElementById('checkButton').addEventListener('click', startCheck);
 
-            // Open/Close Chatbot buttons
-            document.getElementById('openChatButton').addEventListener('click', openChatbot);
-            document.getElementById('closeChatButton').addEventListener('click', closeChatbot);
+        els.btn.onclick = () => {
+            const p = validatePhone();
+            const s = els.symp.value.trim();
+            if (!p || !s) return;
 
-            // Send Chat Message
-            document.getElementById('chatSendButton').addEventListener('click', sendMessage);
-
-            // Allow sending message with Enter key
-            document.getElementById('chatInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault(); 
-                    sendMessage();
-                }
+            els.btn.disabled = true;
+            els.init.classList.add('hidden');
+            els.load.classList.remove('hidden');
+            els.res.classList.add('hidden');
+            
+            triggerWorkflow({ 
+                phone: p, symptoms: s, type: 'diagnostic_report', sessionId: p,
+                message: s, chatInput: s
+            }, (data) => {
+                const item = data;
+                let html = (item.json ? item.json.output : (item.output || item.message || (typeof item === 'string' ? item : "Empty Report")));
+                if (html.startsWith('h3>')) html = '<' + html;
+                els.resDisease.innerHTML = html.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
+                els.resPhone.textContent = item.phone || p;
+                els.load.classList.add('hidden');
+                els.res.classList.remove('hidden');
+                els.btn.disabled = false;
+                log("Report Received.");
             });
-        });
+        };
 
+        async function sendChat(text, isAuto = false) {
+            const p = validatePhone();
+            if (!p) return;
+            
+            if (!isAuto) {
+                const u = document.createElement('div');
+                u.className = "bg-slate-900 text-white p-3 rounded-2xl rounded-tr-none ml-auto max-w-[85%] animate-in slide-in-from-right-5 shadow-sm";
+                u.textContent = text;
+                els.chatMsg.appendChild(u);
+                els.chatMsg.scrollTop = els.chatMsg.scrollHeight;
+            }
+
+            els.typing.classList.remove('hidden');
+
+            triggerWorkflow({ 
+                chatInput: text, message: text, type: 'appointment_booking', 
+                phone: p, sessionId: p 
+            }, (data) => {
+                els.typing.classList.add('hidden');
+                const item = data;
+                
+                let resp = "";
+                if (item.json && item.json.output) resp = item.json.output;
+                else if (item.output) resp = item.output;
+                else if (item.message) resp = item.message;
+                else if (typeof item === 'string') resp = item;
+                else resp = "Agent response confirmed.";
+
+                const b = document.createElement('div');
+                b.className = "bg-white p-3 rounded-2xl rounded-tl-none text-slate-700 shadow-sm border border-slate-100 leading-relaxed animate-in slide-in-from-left-5";
+                b.innerHTML = resp;
+                els.chatMsg.appendChild(b);
+                els.chatMsg.scrollTop = els.chatMsg.scrollHeight;
+                els.input.focus();
+                log("Agent Replied.");
+            });
+        }
+
+        document.getElementById('openChatButton').onclick = () => {
+            if (!validatePhone()) return;
+            els.chat.classList.remove('hidden');
+            if (els.chatMsg.children.length === 0) {
+                const ctx = els.resDisease.innerText || "New Entry";
+                sendChat(`Patient Info Context: ${ctx.substring(0, 100)}...`, true);
+            }
+        };
+
+        document.getElementById('closeChatButton').onclick = () => els.chat.classList.add('hidden');
+        const submit = () => { if (els.input.value.trim()) { sendChat(els.input.value.trim()); els.input.value = ''; } };
+        document.getElementById('chatSendButton').onclick = submit;
+        els.input.onkeypress = (e) => { if (e.key === 'Enter') submit(); };
+        els.clearLog.onclick = () => els.debug.innerHTML = 'Logs cleared.';
     </script>
 </body>
 </html>
